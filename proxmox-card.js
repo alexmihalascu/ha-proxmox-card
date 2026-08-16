@@ -1,4 +1,4 @@
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 class ProxmoxCard extends HTMLElement {
   setConfig(config) {
@@ -13,7 +13,7 @@ class ProxmoxCard extends HTMLElement {
   }
 
   getCardSize() { return 5; }
-  getGridOptions() { return { columns: 6, rows: 5, min_columns: 6, min_rows: 4 }; }
+  getGridOptions() { return { columns: 12, rows: 5, min_columns: 6, min_rows: 4 }; }
 
   entity(suffix, domain = "sensor") {
     return this._hass?.states[`${domain}.${this.config.entity_prefix}_${suffix}`];
