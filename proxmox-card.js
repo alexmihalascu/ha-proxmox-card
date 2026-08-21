@@ -1,15 +1,45 @@
-const VERSION = "0.2.1";
+const VERSION = "0.3.0";
+
+const ACTIONS = [
+  { key: "start", icon: "mdi:play", label: "Start", confirm: false },
+  { key: "stop", icon: "mdi:stop", label: "Stop", confirm: true },
+  { key: "shutdown", icon: "mdi:power", label: "Shutdown", confirm: true },
+  { key: "restart", icon: "mdi:restart", label: "Restart", confirm: true },
+];
+
+function actionsHtml(hass, prefix) {
+  const buttons = ACTIONS.filter((a) => hass.states[`button.${prefix}_${a.key}`])
+    .map((a) => `<button class="act" data-entity="button.${prefix}_${a.key}" data-confirm="${a.confirm}" title="${a.label}"><ha-icon icon="${a.icon}"></ha-icon></button>`)
+    .join("");
+  return buttons ? `<div class="actions">${buttons}</div>` : "";
+}
+
+function bindActions(root, hass) {
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-entity]");
+    if (!btn) return;
+    const entityId = btn.dataset.entity;
+    if (btn.dataset.confirm === "true" && !confirm(`Execuți ${entityId.split(".")[1].replaceAll("_", " ")}?`)) return;
+    hass.callService("button", "press", { entity_id: entityId });
+  });
+}
+
+const ACTIONS_STYLE = `.actions{position:relative;display:flex;gap:8px;margin-top:12px}.act{flex:1;display:grid;place-items:center;padding:9px 0;border:none;border-radius:12px;background:color-mix(in srgb,var(--primary-color) 10%,transparent);color:var(--primary-text-color);cursor:pointer;transition:background .2s ease}.act:hover{background:color-mix(in srgb,var(--primary-color) 20%,transparent)}.act ha-icon{--mdc-icon-size:20px}`;
 
 class ProxmoxCard extends HTMLElement {
   setConfig(config) {
     if (!config?.entity_prefix) throw new Error("Definește entity_prefix, de exemplu jellyfin");
-    this.config = { name: config.entity_prefix, kind: "VM / LXC", ...config };
+    this.config = { name: config.entity_prefix, kind: "VM / LXC", actions: true, ...config };
     this.attachShadow({ mode: "open" });
   }
 
   set hass(hass) {
     this._hass = hass;
     this.render();
+    if (!this._bound) {
+      bindActions(this.shadowRoot, hass);
+      this._bound = true;
+    }
   }
 
   getCardSize() { return 6; }
@@ -82,16 +112,98 @@ class ProxmoxCard extends HTMLElement {
       .metrics{position:relative;display:grid;grid-template-columns:repeat(${disk === null ? 2 : 3},1fr);gap:12px;margin:20px 0}.metric{text-align:center}.ring{width:86px;height:86px;margin:auto;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--metric-color) calc(var(--pct)*1%),color-mix(in srgb,var(--secondary-text-color) 18%,transparent) 0);transition:background .7s ease}.ring:before{content:"";position:absolute}.ring-inner{width:68px;height:68px;border-radius:50%;background:var(--ha-card-background,var(--card-background-color));display:grid;place-content:center;gap:2px}.ring-inner ha-icon{margin:auto;color:var(--metric-color);--mdc-icon-size:19px}.metric span{display:block;margin-top:7px;font-size:12px;font-weight:700;opacity:.72}.metric small{display:block;margin-top:2px;font-size:10px;font-weight:600;opacity:.55;font-variant-numeric:tabular-nums}
       .network{position:relative;justify-content:space-between;padding:11px 13px;border-radius:14px;background:color-mix(in srgb,var(--primary-color) 7%,transparent);font-size:12px}.network div{display:flex;align-items:center;gap:6px}.network ha-icon{--mdc-icon-size:18px;color:var(--primary-color)}
       .footer{position:relative;justify-content:space-between;margin-top:13px;font-size:12px;opacity:.7}.footer ha-icon{--mdc-icon-size:17px;margin-right:5px}
+      ${ACTIONS_STYLE}
     </style><ha-card>
       <div class="head"><div class="title"><ha-icon icon="${this.config.icon || "mdi:server"}"></ha-icon><div><strong>${this.config.name}</strong><small>${this.config.kind}</small></div></div><div class="status"><i class="dot"></i>${statusText}</div></div>
       <div class="metrics">${this.ring("CPU",cpu,"mdi:cpu-64-bit")}${this.ring("RAM",ram,"mdi:memory",ramSub)}${disk === null ? "" : this.ring("Disk",disk,"mdi:harddisk",diskSub)}</div>
       <div class="network"><div><ha-icon icon="mdi:download-network-outline"></ha-icon><span>IN ${netIn}</span></div><div><ha-icon icon="mdi:upload-network-outline"></ha-icon><span>OUT ${netOut}</span></div></div>
       <div class="footer"><span><ha-icon icon="mdi:timer-outline"></ha-icon>Uptime ${uptime}</span></div>
+      ${this.config.actions ? actionsHtml(this._hass, this.config.entity_prefix) : ""}
     </ha-card>`;
   }
 }
 
 customElements.define("proxmox-card", ProxmoxCard);
+
+class ProxmoxOverviewCard extends HTMLElement {
+  setConfig(config) {
+    this.config = { title: "Proxmox", exclude: [], ...config };
+    this.attachShadow({ mode: "open" });
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this.render();
+    if (!this._bound) {
+      bindActions(this.shadowRoot, hass);
+      this._bound = true;
+    }
+  }
+
+  getCardSize() { return this._hass ? 2 + this.discoverGuests().length : 3; }
+
+  discoverGuests() {
+    const hass = this._hass;
+    const prefixes = new Set();
+    const registry = hass.entities;
+    if (registry) {
+      for (const [entityId, entry] of Object.entries(registry)) {
+        if (entry.platform !== "proxmoxve") continue;
+        const m = entityId.match(/^(?:binary_sensor|sensor)\.(.+)_status$/);
+        if (m) prefixes.add(m[1]);
+      }
+    } else {
+      for (const entityId of Object.keys(hass.states)) {
+        const m = entityId.match(/^binary_sensor\.(.+)_status$/);
+        if (m && hass.states[`sensor.${m[1]}_cpu_usage`]) prefixes.add(m[1]);
+      }
+    }
+    const exclude = new Set(this.config.exclude);
+    return [...prefixes].filter((p) => !exclude.has(p)).sort();
+  }
+
+  row(prefix) {
+    const hass = this._hass;
+    const binary = hass.states[`binary_sensor.${prefix}_status`];
+    const sensor = hass.states[`sensor.${prefix}_status`];
+    const raw = (sensor?.state || binary?.state || "unknown").toLowerCase();
+    const online = ["on", "online", "running"].includes(raw);
+    const name = (hass.states[`sensor.${prefix}_status`] || hass.states[`binary_sensor.${prefix}_status`])?.attributes.friendly_name?.replace(/ Status$/i, "") || prefix.replaceAll("_", " ");
+    const cpu = Number.parseFloat(hass.states[`sensor.${prefix}_cpu_usage`]?.state);
+    const ram = Number.parseFloat(hass.states[`sensor.${prefix}_memory_usage_percentage`]?.state);
+    const stats = [
+      Number.isFinite(cpu) ? `CPU ${cpu.toFixed(0)}%` : null,
+      Number.isFinite(ram) ? `RAM ${ram.toFixed(0)}%` : null,
+    ].filter(Boolean).join(" · ");
+    return `<div class="row">
+      <div class="rleft"><i class="dot ${online ? "on" : "off"}"></i><div><strong>${name}</strong>${stats ? `<small>${stats}</small>` : ""}</div></div>
+      ${actionsHtml(hass, prefix)}
+    </div>`;
+  }
+
+  render() {
+    if (!this.shadowRoot || !this._hass) return;
+    const guests = this.discoverGuests();
+    this.shadowRoot.innerHTML = `<style>
+      :host{display:block;height:100%}ha-card{padding:16px 18px;border-radius:22px}
+      .title{font-size:16px;font-weight:700;margin-bottom:10px}
+      .row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid color-mix(in srgb,var(--secondary-text-color) 12%,transparent)}
+      .row:first-of-type{border-top:none}
+      .rleft{display:flex;align-items:center;gap:10px;min-width:0}.rleft strong{display:block;font-size:14px;text-transform:capitalize}.rleft small{opacity:.6;font-size:11px}
+      .dot{width:9px;height:9px;flex:none;border-radius:50%}.dot.on{background:var(--success-color,#43a047)}.dot.off{background:var(--error-color,#db4437)}
+      .actions{margin:0;flex:none}.act{width:34px;height:34px;padding:0}
+      ${ACTIONS_STYLE}
+      .empty{opacity:.6;font-size:13px;padding:6px 0}
+    </style><ha-card>
+      <div class="title">${this.config.title}</div>
+      ${guests.length ? guests.map((g) => this.row(g)).join("") : `<div class="empty">Niciun VM/container găsit din integrarea Proxmox VE.</div>`}
+    </ha-card>`;
+  }
+}
+
+customElements.define("proxmox-overview-card", ProxmoxOverviewCard);
+
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "proxmox-card", name: "Proxmox Card", description: "Card animat pentru noduri, VM-uri și containere Proxmox" });
+window.customCards.push({ type: "proxmox-overview-card", name: "Proxmox Overview Card", description: "Listă automată cu toate VM-urile/containerele Proxmox, cu control Start/Stop/Shutdown/Restart" });
 console.info(`%c PROXMOX-CARD %c v${VERSION} `, "color:white;background:#e57000;font-weight:700", "color:#e57000;background:#fff");
