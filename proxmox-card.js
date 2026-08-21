@@ -1,9 +1,9 @@
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 const ACTIONS = [
   { key: "start", icon: "mdi:play", label: "Start", confirm: false },
   { key: "stop", icon: "mdi:stop", label: "Stop", confirm: true },
-  { key: "shutdown", icon: "mdi:power", label: "Shutdown", confirm: true },
+  { key: "shut_down", icon: "mdi:power", label: "Shutdown", confirm: true },
   { key: "restart", icon: "mdi:restart", label: "Restart", confirm: true },
 ];
 

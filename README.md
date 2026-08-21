@@ -22,7 +22,21 @@ The card displays live status, CPU, RAM, disk usage, network traffic and uptime.
 
 ## Power controls
 
-If the Proxmox VE integration has created `button.<prefix>_start` / `_stop` / `_shutdown` / `_restart` entities for a guest (this needs the Proxmox API token used by the integration to have a role with `VM.PowerMgmt`, e.g. `PVEVMUser` — `PVEAuditor` alone is read-only and won't create these buttons), matching buttons appear on the card automatically. Stop/Shutdown/Restart ask for confirmation. Set `actions: false` to hide them.
+If the Proxmox VE integration has created `button.<prefix>_start` / `_stop` / `_shut_down` / `_restart` entities for a guest or node, matching buttons appear on the card automatically. Stop/Shutdown/Restart ask for confirmation. Set `actions: false` to hide them.
+
+This needs the Proxmox API token used by the integration to have power-management privileges — `PVEAuditor` alone is read-only:
+
+```
+# VM/container start/stop/shutdown/restart
+pveum acl modify / --tokens 'root@pam!homeassistant' --roles PVEVMUser
+
+# node reboot/shutdown (Sys.PowerMgmt isn't in any built-in role short of
+# Administrator, which is root-equivalent — a scoped custom role is safer)
+pveum role add ProxmoxHANodePower --privs "Sys.PowerMgmt"
+pveum acl modify / --tokens 'root@pam!homeassistant' --roles ProxmoxHANodePower
+```
+
+Reload the Proxmox VE integration afterwards (Settings → Devices & Services → Proxmox VE → ⋮ → Reload) for the new buttons to appear. Node-only bulk actions (`start_all`/`stop_all`/`suspend_all`) exist as entities too but are intentionally not wired into the card — a one-click "stop every guest on this node" button next to a single VM's Stop button is a good way to have a bad night.
 
 ## Overview card
 
