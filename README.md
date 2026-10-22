@@ -4,6 +4,8 @@ Animated Home Assistant dashboard card for Proxmox nodes, virtual machines and c
 
 The card automatically resolves the standard entities created by the Home Assistant Proxmox VE integration from a single `entity_prefix`.
 
+![Proxmox Card showing an LXC container](screenshot.png)
+
 ## Installation
 
 Add this repository to HACS as a custom **Dashboard** repository, install it, and refresh Home Assistant.
@@ -18,7 +20,7 @@ kind: VM 103
 icon: mdi:home-assistant
 ```
 
-The card displays live status, CPU, RAM, disk usage, network traffic and uptime. The RAM and disk rings also show the allocated amount (e.g. `2.4 / 4.0 GiB`), read from the integration's `max_memory_usage` / `max_disk_usage` sensors — no vCPU-count entity exists in the integration, so CPU allocation isn't shown. Missing or disabled entities are handled gracefully.
+The card displays live status, CPU, RAM, disk usage, network traffic and uptime. The RAM and disk rings also show the allocated amount (e.g. `2.4 / 4.0 GiB`), read from the integration's `max_memory_usage` / `max_disk_usage` sensors — no vCPU-count entity exists in the integration, so CPU allocation isn't shown. Uptime is computed from the boot timestamp the integration reports and shown as elapsed time (e.g. `8z 15h`), or `-` while the guest is stopped. Missing or disabled entities are handled gracefully.
 
 ## Power controls
 
