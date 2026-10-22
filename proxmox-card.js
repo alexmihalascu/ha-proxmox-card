@@ -1,4 +1,4 @@
-const VERSION = "0.3.1";
+const VERSION = "0.3.2";
 
 const ACTIONS = [
   { key: "start", icon: "mdi:play", label: "Start", confirm: false },
@@ -103,7 +103,16 @@ class ProxmoxCard extends HTMLElement {
 
     const netIn = this.display("network_input");
     const netOut = this.display("network_output");
-    const uptime = this.display("uptime");
+    // uptime sensor holds the boot timestamp: show elapsed time instead of parseFloat("2026-...")
+    const upState = this.entity("uptime");
+    let uptime = this.display("uptime");
+    const bootMs = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(String(upState?.state)) ? Date.parse(upState.state) : NaN;
+    if (!status.online) uptime = "-";
+    else if (Number.isFinite(bootMs)) {
+      const min = Math.max(0, Math.floor((Date.now() - bootMs) / 60000));
+      const days = Math.floor(min / 1440), hours = Math.floor((min % 1440) / 60);
+      uptime = days ? `${days}z ${hours}h` : `${hours}h ${min % 60}m`;
+    }
     const statusText = status.online ? "Online" : status.raw === "unknown" ? "Indisponibil" : "Oprit";
     this.shadowRoot.innerHTML = `<style>
       :host{display:block;height:100%}ha-card{height:100%;overflow:hidden;position:relative;padding:18px;border-radius:22px;background:linear-gradient(145deg,var(--ha-card-background,var(--card-background-color)),color-mix(in srgb,var(--primary-color) 8%,var(--ha-card-background,var(--card-background-color))));box-sizing:border-box}
